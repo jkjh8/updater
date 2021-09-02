@@ -1,0 +1,23 @@
+{
+  "name": "update",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "nodemon ./bin/www"
+  },
+  "dependencies": {
+    "axios": "^0.21.1",
+    "cheerio": "^1.0.0-rc.10",
+    "cookie-parser": "~1.4.4",
+    "debug": "~2.6.9",
+    "express": "~4.16.1",
+    "http-errors": "~1.6.3",
+    "jade": "~1.11.0",
+    "mongoose": "^6.0.3",
+    "mongoose-paginate-v2": "^1.4.2",
+    "morgan": "~1.9.1",
+    "node-cron": "^3.0.0",
+    "qsys-qrc-client": "^0.1.1",
+    "zen-observable": "^0.8.15"
+  }
+}
