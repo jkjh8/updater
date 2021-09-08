@@ -4,6 +4,7 @@ const path = require('path')
 const cookieParser = require('cookie-parser')
 const logger = require('morgan')
 const cron = require('node-cron')
+const moment = require('moment')
 
 const Devices = require('./models/devices')
 const barix = require('./devices/barix')
@@ -51,9 +52,10 @@ async function getDeviceInfo () {
       barix.get(device.ipaddress)
     } else if (device.type === 'QSys') {
       // await qsys.getStatus(device.ipaddress)
-      await qsys.paStatusUpdate(device.ipaddress)
+      await qsys.updateDevice(device)
     }
   })
+  console.log(moment().format('YYYY-MM-DD hh:mm:ss a'))
 }
 
 cron.schedule('*/10 * * * * *', () => {

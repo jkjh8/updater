@@ -51,6 +51,7 @@ module.exports.get = async (ipaddress) => {
           updateExtreamer(deviceInfo)
           break
       }
+      await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: true } })
     } else {
       statusFail(ipaddress)
     }

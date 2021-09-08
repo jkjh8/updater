@@ -3,235 +3,92 @@ const { commands } = require('qsys-qrc-client')
 const Devices = require('../../models/devices')
 const Qsys = require('../../models/qsys')
 
-const connect = (address) => {
+module.exports.updateDevice = async function (obj) {
   const client = new QrcClient()
-  client.socket.setTimeout(5000)
-  client.on('connect', function () {
-    console.log('qsys connect')
-  })
-  client.on('finish', function () {
-    console.log('qsys finish ', address)
-  })
-  client.on('error', async function (e) {
-    console.log('qsys error ', address, e)
-    try {
-      await Devices.updateOne({
-        ipaddress: address.host
-      }, {
-        $set: {
-          status: false
-        }
-      })
-    } catch (err) {
-      console.log(err)
-    }
-  })
-  client.on('timeout', function () {
-    console.error('q-sys connet timeout', address)
+  client.on('connect', async () => {
+    await Devices.updateOne({ ipaddress: obj.ipaddress}, { $set: { status: true } })
+    await updateZones(client, obj)
+    await updateRx(client, obj)
+    await updateTx(client, obj)
     client.end()
   })
-  return client.connect({ host: address, port: 1710 })
+  client.on('error', (e) => onError(e, obj, client))
+  client.socket.on('timeout', () => client.end())
+  client.connect({ host: obj.ipaddress, port: 1710 })
 }
 
-const logon = async (client, username, password) => {
-  return await client.send(commands.logon(username, password))
-}
-
-module.exports.getStatus = async (address) => {
-  try {
-    const client = await connect(address)
-    // const user = await logon(client, 'admin', 'password')
-    const status = await client.send(commands.getStatus())
-    client.end()
-    return status
-  } catch (err) {
-    return null
-  }
-}
-
-module.exports.getNamedControls = async (address, controlNames) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.getNamedControls(controlNames))
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-
-module.exports.setNamedControl = async (address, controlName, spec) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.setNamedControl(controlName, spec))
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-
-module.exports.getComponents = async (address) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.getComponents())
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-
-module.exports.componentGetControls = async (address, componentName) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.componentGetControls(componentName))
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-module.exports.getComponentControls = async (address, componentName, controlNames) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.getComponentControls(componentName, controlNames))
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-
-module.exports.setComponentControls = async (address, componentName, controls) => {
-  try {
-    const client = await connect(address)
-    const result = await client.send(commands.setComponentControls(componentName, controls))
-    client.end()
-    return result
-  } catch (error) {
-    return null
-  }
-}
-
-const paInit = async (ipaddress, numOfCh = 16) => {
-  const newQsys = new Qsys({
-    ipaddress: ipaddress,
-    channels: numOfCh
-  })
-  for (let i = 0; i < numOfCh; i++) {
-    newQsys.zone.push({
-      channel: i + 1,
-      active: false,
-      gain: 0,
-      mute: false,
-      name: '0',
-      priority: 0,
-      source: 0,
-      squelch: 0,
-      squelchactive: false,
-      bgmgain: 0,
-      bgmchannel: 1,
-      pagegain: 0,
-      pagemute: false,
-      messagegain: 0,
-      messagemute: false
-    })
-  }
-  newQsys.save((err) => {
-    if (err) { console.error(err) }
-  })
-  return newQsys
-}
-
-module.exports.paStatusUpdate = async (ipaddress) => {
-  try {
-    let channels = 16
-    
-    let db = await Qsys.findOne({ ipaddress: ipaddress })
-    if (db) {
-      channels = db.channels
-    } else {
-      db = await paInit(ipaddress)
-    }
-
-    const client = await connect(ipaddress)
-    if (client) {
-      await updatePAZones(db, client, channels)
-      await updatePABgms(db, client, channels)
-      client.end()
-      await db.save()
-    } else {
-      return console.error('qsys not connected')
-    }
-  } catch (err) {
-    console.error(err)
-  }
-}
-
-const updatePAZones = async (db, client, channels) => {
-  try {
-    const controlNames = getPAControlNames(channels)
-    const rt = await client.send(commands.getComponentControls('PA', controlNames))
-    rt.Controls.forEach(control => {
-      const name = control.Name.split('.')
-      const idx = Number(name[1]) - 1
-      const key = name[2] + (name[3] ? name[3]: '')
-      for (let i = 0; i < channels; i++) {
-        if (i === idx) {
-          if (key === 'name' || key === 'message') {
-            db.zone[idx][key] = control.String
-            break
-          }
-          db.zone[i][key] = control.Value
-          break
-        }
-      }
-    })
-  } catch (err) {
-    console.error('update Pa Zones error', err)
-  }
-}
-
-const updatePABgms = async (db, client, channels) => {
-  const controlNames = getPAControlBgmNames(channels)
-  const rt = await client.send(commands.getComponentControls('PA', controlNames))
-
-  rt.Controls.forEach(control => {
-    const idx = Number(control.Name.replace('bgm.router.select.', ''))
-    for (let i = 0; i < channels; i++) {
-      if (i === idx) {
-        db.zone[i].bgmchannel = control.Value
+async function updateZones (client, obj) {
+  const device = await Qsys.findOne({ ipaddress: obj.ipaddress })
+  const zones = await client.send({ method: 'Component.GetControls', params: { Name: 'PA' } })
+  const active = []
+  zones.Controls.forEach(e => {
+    for (let i = 0; i < device.zone.length; i++) {
+      if (e.Name === device.zone[i].Name) {
+        device.zone[i] = e
         break
       }
     }
   })
+  //check active
+  device.zone.forEach(e => {
+    if (e.Name.match(/zone.\d+.active/)) {
+      active.push(e)
+    }
+  })
+  const result = active.some(e => e.Value === true)
+  device.active = result
+  await device.save()
+  return result
 }
 
-const getPAControlNames = (channels) => {
-  const controlNames = []
-  for (let i = 0; i < channels; i++) {
-    controlNames.push( `zone.${i + 1}.active`)
-    controlNames.push( `zone.${i + 1}.gain`)
-    controlNames.push( `zone.${i + 1}.mute`)
-    controlNames.push( `zone.${i + 1}.name`)
-    controlNames.push( `zone.${i + 1}.priority`)
-    controlNames.push( `zone.${i + 1}.source`)
-    controlNames.push( `zone.${i + 1}.message`)
-    controlNames.push( `zone.${i + 1}.message.gain`)
-    controlNames.push( `zone.${i + 1}.message.mute`)
-    controlNames.push( `zone.${i + 1}.page.gain`)
-    controlNames.push( `zone.${i + 1}.page.mute`)
-    controlNames.push( `zone.${i + 1}.bgm.gain`)
+async function updateRx (client, obj) {
+  try {
+    const device = await Devices.findOne({ ipaddress: obj.ipaddress })
+    const qsys = await Qsys.findOne({ ipaddress: obj.ipaddress })
+
+    for (let i = 0; i < device.rx; i++) {
+      const r = await client.send({ method: 'Component.GetControls', params: { Name: `RX${i + 1}` } })
+      r.Controls.forEach(e => {
+        for (let j = 0; j < qsys.rx[i].length; j++) {
+          if (qsys.rx[i][j].Name === e.Name) {
+            qsys.rx[i][j] = e
+            break
+          }
+        }
+      })
+    }
+    qsys.save()
+  } catch (err) {
+    console.error('err', err)
   }
-  return controlNames
 }
 
-const getPAControlBgmNames = (channels) => {
-  const controlNames = []
-  for (let i = 0; i < channels; i++) {
-    controlNames.push( `bgm.router.select.${i + 1}`)
+async function updateTx (client, obj) {
+  try {
+    const device = await Devices.findOne({ ipaddress: obj.ipaddress })
+    const qsys = await Qsys.findOne({ ipaddress: obj.ipaddress })
+
+    for (let i = 0; i < device.tx; i++) {
+      const r = await client.send({ method: 'Component.GetControls', params: { Name: `TX${i + 1}` } })
+      r.Controls.forEach(e => {
+        for (let j = 0; j < qsys.tx[i].length; j++) {
+          if (qsys.tx[i][j].Name === e.Name) {
+            qsys.tx[i][j] = e
+            break
+          }
+        }
+      })
+    }
+    qsys.save()
+  } catch (err) {
+    console.error('err', err)
   }
-  return controlNames
 }
-module.exports.paInit = paInit
+
+const onError = (e, obj, client) => {
+  if (client) {
+    client.end()
+  }
+  console.error(`Q-SYS IP: ${obj.ipaddress} 장비 정보 수집중 에러가 발생하였습니다.`, e)
+  Devices.updateOne({ ipaddress: obj.ipaddress }, { $set: { status: false } }).exec()
+}
