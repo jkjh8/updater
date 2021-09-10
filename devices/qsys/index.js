@@ -1,12 +1,20 @@
 const QrcClient = require('qsys-qrc-client').default
 const { commands } = require('qsys-qrc-client')
 const Devices = require('../../models/devices')
+const Locations = require('../../models/location')
+const Zones = require('../../models/zones')
 const Qsys = require('../../models/qsys')
+
+async function statusOn (obj) {
+  Devices.updateMany({ ipaddress: obj.ipaddress}, { $set: { status: true } })
+  Locations.updateMany({ ipaddress: obj.ipaddress}, { $set: { status: true } })
+  Zones.updateMany({ ipaddress: obj.ipaddress}, { $set: { status: true } })
+}
 
 module.exports.updateDevice = async function (obj) {
   const client = new QrcClient()
   client.on('connect', async () => {
-    await Devices.updateOne({ ipaddress: obj.ipaddress}, { $set: { status: true } })
+    await statusOn(obj)
     await updateZones(client, obj)
     await updateRx(client, obj)
     await updateTx(client, obj)
@@ -85,10 +93,12 @@ async function updateTx (client, obj) {
   }
 }
 
-const onError = (e, obj, client) => {
+const onError = async (e, obj, client) => {
   if (client) {
     client.end()
   }
   console.error(`Q-SYS IP: ${obj.ipaddress} 장비 정보 수집중 에러가 발생하였습니다.`, e)
-  Devices.updateOne({ ipaddress: obj.ipaddress }, { $set: { status: false } }).exec()
+  await Devices.updateOne({ ipaddress: obj.ipaddress }, { $set: { status: false } })
+  await Locations.updateOne({ ipaddress: obj.ipaddress }, { $set: { status: false } })
+  await Zones.updateOne({ ipaddress: obj.ipaddress }, { $set: { status: false } })
 }

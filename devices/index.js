@@ -30,5 +30,6 @@ module.exports.get = async () => {
 }
 
 async function returnError (ipaddress) {
-  return await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
+  console.log('Error', ipaddress)
+  // return await Devices.updateMany({ ipaddress: ipaddress }, { $set: { status: false } })
 }

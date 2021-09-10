@@ -1,6 +1,8 @@
 const axios = require('axios')
 const cheerio = require('cheerio')
 const Devices = require('../../models/devices')
+const Locations = require('../../models/location')
+const Zones = require('../../models/zones')
 const Barixes = require('../../models/barixes')
 
 
@@ -42,6 +44,7 @@ module.exports.http = http
 module.exports.get = async (ipaddress) => {
   try {
     const deviceInfo = await http(ipaddress)
+    await statusOn(ipaddress)
     if (deviceInfo) {
       switch (deviceInfo.hardware.fwname) {
         case 'InstreamerKit':
@@ -51,7 +54,6 @@ module.exports.get = async (ipaddress) => {
           updateExtreamer(deviceInfo)
           break
       }
-      await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: true } })
     } else {
       statusFail(ipaddress)
     }
@@ -60,14 +62,16 @@ module.exports.get = async (ipaddress) => {
   }
 }
 
+async function statusOn (ipaddress) {
+  Devices.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
+  Locations.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
+  Zones.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
+}
+
 async function statusFail(ipaddress) {
-  await Devices.updateOne({
-    ipaddress: ipaddress
-  }, {
-    $set: {
-      status: false
-    }
-  })
+  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
+  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
+  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
 }
 
 async function updateInstreamer (info) {
