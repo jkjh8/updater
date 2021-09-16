@@ -1,11 +1,6 @@
 const axios = require('axios')
 const cheerio = require('cheerio')
 const Devices = require('../../models/devices')
-const Locations = require('../../models/location')
-const Zones = require('../../models/zones')
-const Barixes = require('../../models/barixes')
-
-
 
 async function http (address) {
   try {
@@ -41,44 +36,32 @@ async function http (address) {
   }
 }
 module.exports.http = http
-module.exports.get = async (ipaddress) => {
+module.exports.get = async (obj) => {
   try {
-    const deviceInfo = await http(ipaddress)
-    await statusOn(ipaddress)
-    if (deviceInfo) {
-      switch (deviceInfo.hardware.fwname) {
+    const getDeviceInfo = await http(obj.ipaddress)
+    if (getDeviceInfo) {
+      switch (getDeviceInfo.hardware.fwname) {
         case 'InstreamerKit':
-          updateInstreamer(deviceInfo)
+          updateInstreamer(obj, getDeviceInfo)
           break
         case 'StreamingClientKit':
-          updateExtreamer(deviceInfo)
+          updateExtreamer(obj, getDeviceInfo)
           break
       }
     } else {
-      statusFail(ipaddress)
+      await Devices.updateOne({ _id: obj._id }, { status: false })
     }
   } catch (err) {
-    statusFail(ipaddress)
+    await Devices.updateOne({ _id: obj._id }, { status: false })
   }
 }
 
-async function statusOn (ipaddress) {
-  Devices.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
-  Locations.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
-  Zones.updateMany({ ipaddress: ipaddress}, { $set: { status: true } })
-}
-
-async function statusFail(ipaddress) {
-  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
-  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
-  await Devices.updateOne({ ipaddress: ipaddress }, { $set: { status: false } })
-}
-
-async function updateInstreamer (info) {
-  const r = await Barixes.updateOne({
-    ipaddress: info.network.ip
+async function updateInstreamer (obj, info) {
+  const r = await Devices.updateOne({
+    _id: obj._id
   }, {
-    $set: {
+    status: true,
+    detail: {
       fwname: info.hardware.fwname,
       uptime: parseInt(info.hardware.uptime),
       ticks: parseInt(info.hardware.ticks),
@@ -111,14 +94,16 @@ async function updateInstreamer (info) {
         stream8: info.streaming.stream8
       }
     }
-  }, { upsert: true })
+  })
+  return r
 }
 
-async function updateExtreamer (info) {
-  const r = await Barixes.updateOne({
-    ipaddress: info.network.ip
+async function updateExtreamer (obj, info) {
+  const r = await Devices.updateOne({
+    _id: obj._id
   }, {
-    $set: {
+    status: true,
+    detail: {
       fwname: info.hardware.fwname,
       uptime: info.hardware.uptime,
       ticks: parseInt(info.hardware.ticks),
@@ -154,5 +139,6 @@ async function updateExtreamer (info) {
         relay8: info.status.relay8
       }
     }
-  }, { upsert: true })
+  })
+  return r
 }

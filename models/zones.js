@@ -1,13 +1,14 @@
 const mongoose = require('mongoose')
 
 const zonesSchema = new mongoose.Schema({
+  active: { type: Boolean },
   index: { type: Number, unique: true },
   name: { type: String, },
   type: { type: String, default: 'Barix' },
   parent: { type: Object },
   device: { type: Object },
   channel: { type: Number },
-  status: { type: Boolean },
+  status: { type: Boolean, default: false },
   check: { type: Boolean, default: false },
   // timestamp
   createdAt: { type: Date, default: Date.now },
